@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Habitability Score Explorer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Inline additions specific to new module UI elements */
+    #weightsBox { font-size:0.65rem; }
+    .slider-row { display:flex; align-items:center; gap:4px; margin:4px 0; }
+    .slider-row label { flex:0 0 70px; font-size:0.65rem; }
+    .slider-row input[type=range] { flex:1; }
+    #errorBox { color:#b00020; font-size:0.65rem; min-height:14px; margin:4px 0 6px; }
+  /* Removed scoreCircle pie chart */
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Habitability Score Explorer</h1>
+    <p class="tagline">Enter coordinates or click the map to evaluate location livability.</p>
+  </header>
+  <main>
+    <section id="leftPanel">
+      <form id="coordForm" aria-label="Coordinate input form">
+        <div class="field-row">
+          <label>Latitude<br><input id="latInput" type="number" step="0.000001" placeholder="40.75874" required></label>
+          <label>Longitude<br><input id="lngInput" type="number" step="0.000001" placeholder="-73.978674" required></label>
+        </div>
+        <div class="field-row">
+          <label>Sample Address
+            <select id="sampleSelect">
+              <option value="">-- choose --</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-row">
+          <button type="submit" class="primary">Compute Score</button>
+          <button type="button" id="clearPoint" class="secondary">Clear</button>
+        </div>
+        <p class="hint">You can also click anywhere on the map.</p>
+        <div id="errorBox" role="alert" aria-live="polite"></div>
+
+        <div class="card" id="weightsBox" aria-label="Weight adjustment">
+          <strong style="font-size:0.7rem;">Adjust Weights</strong>
+          <div class="slider-row"><label for="w_amenity">Amenities</label><input id="w_amenity" type="range" min="0" max="100" value="40"></div>
+          <div class="slider-row"><label for="w_polygons">Polygons</label><input id="w_polygons" type="range" min="0" max="100" value="40"></div>
+            <div class="slider-row"><label for="w_penalty">Penalty</label><input id="w_penalty" type="range" min="5" max="60" value="20"></div>
+          <div style="text-align:right; margin-top:2px;">Normalized: <span id="weightsDisplay">A:0.40 P:0.40 Pen:0.20</span></div>
+        </div>
+      </form>
+
+      <section id="scorePanel" class="card hidden" aria-live="polite">
+        <h2 style="text-align:center;font-size:0.95rem;">Habitability Score: <span id="scoreValue" tabindex="-1">—</span></h2>
+        <div id="scoreBreakdown"></div>
+      </section>
+
+      <section class="card" id="legend">
+        <h3>Legend</h3>
+        <p><span class="swatch air"></span> Air Quality Zones</p>
+        <p><span class="swatch crime"></span> Crime Zones</p>
+        <p><span class="swatch rent"></span> Median Rent Zones</p>
+        <p><span class="swatch school"></span> School Quality Zones</p>
+        <p><span class="swatch transit"></span> Transit Access Zones</p>
+        <hr>
+        <p><span class="pos-dot"></span> Positive amenity</p>
+        <p><span class="neg-dot"></span> Negative feature</p>
+      </section>
+
+      <details class="card">
+        <summary>Scoring Method (info)</summary>
+        <div class="small">
+          <p>Score combines:</p>
+          <ul>
+            <li>Proximity (decay) to parks, grocery, schools, transit (bike/ferry)</li>
+            <li>Penalties near negative features (crime hotspots, waste, jail, etc.)</li>
+            <li>Polygon attributes normalized: air quality, rent (inverse), school quality, transit distance</li>
+          </ul>
+          <p>Weights (initial): Amenities 40%, Polygons 40%, Penalties -20%. Values normalized 0–100.</p>
+        </div>
+      </details>
+
+      <div class="card" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem;">
+        <div style="font-size:0.7rem; line-height:1.2;">
+          <strong>Display</strong><br>
+          Toggle dark theme & adjust layer opacity.
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button id="themeToggle" type="button" class="secondary" style="min-width:70px;">Dark</button>
+          <button id="showOpacity" type="button" class="secondary" style="min-width:70px;">Opacity</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="mapPanel">
+      <div id="map"></div>
+      <!-- Polygon opacity control (now triggered via left panel) -->
+      <div id="opacityControl" class="hidden" aria-label="Polygon opacity control">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; margin-bottom:4px;">
+          <span>Layer Opacity</span>
+          <span id="opacityValue">50%</span>
+        </div>
+        <input id="polygonOpacity" type="range" min="10" max="100" value="50" step="1" aria-describedby="opacityValue">
+        <div style="margin-top:4px; display:flex; justify-content:space-between; align-items:center;">
+          <label style="display:flex; align-items:center; gap:4px; font-size:0.55rem; cursor:pointer;">
+            <input type="checkbox" id="blendToggle" checked style="margin:0;"> Blend
+          </label>
+          <button id="opacityClose" type="button" class="secondary" style="padding:2px 6px; font-size:0.55rem;">✕</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Demo only – illustrative data & heuristic formula. Adjust weights with sliders. Modular ES build (no framework).</p>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
